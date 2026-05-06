@@ -1,0 +1,50 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter / Colab
+.ipynb_checkpoints/
+
+# Local environment and secrets
+.env
+.env.*
+*.pem
+*.key
+token.json
+kaggle.json
+huggingface_token*
+
+# Training outputs
+outputs/
+sft_outputs/
+checkpoints/
+runs/
+wandb/
+
+# Source/raw data not needed for Colab training
+raw_data/
+
+# Model artifacts
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.gguf
+adapter_model.*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+
+# OMX local runtime state
+.omx/

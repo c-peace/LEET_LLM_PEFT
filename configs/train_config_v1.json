@@ -1,0 +1,57 @@
+{
+  "dataset": {
+    "path": "sft_dataset.json",
+    "train_ratio": 0.9,
+    "valid_ratio": 0.1,
+    "stratify_by": "question_type",
+    "seed": 42
+  },
+  "prompt": {
+    "template_path": "configs/prompt_template_v1.md",
+    "include_fields": [
+      "passage",
+      "question",
+      "question_type"
+    ],
+    "output_format": "json"
+  },
+  "models": [
+    "Qwen/Qwen3.5-4B",
+    "google/gemma-4-E4B-it",
+    "LGAI-EXAONE/EXAONE-3.5-2.4B-Instruct"
+  ],
+  "training": {
+    "method": "qlora",
+    "load_in_4bit": true,
+    "max_seq_length": 4096,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0.05,
+    "learning_rate": 0.0002,
+    "num_train_epochs": 3,
+    "per_device_train_batch_size": 1,
+    "per_device_eval_batch_size": 1,
+    "gradient_accumulation_steps": 8,
+    "warmup_ratio": 0.03,
+    "weight_decay": 0.0,
+    "gradient_checkpointing": true,
+    "save_strategy": "epoch",
+    "eval_strategy": "epoch",
+    "logging_steps": 10
+  },
+  "evaluation": {
+    "rule_based": true,
+    "generation_sample_size": 100,
+    "max_new_tokens": 1024,
+    "temperature": 0.2,
+    "top_p": 0.9,
+    "do_sample": false
+  },
+  "outputs": {
+    "root_dir": "outputs/runs",
+    "adapter_dir_name": "adapter",
+    "eval_results_file": "eval_results.json",
+    "eval_summary_file": "eval_summary.json",
+    "train_config_file": "train_config.json"
+  }
+}
