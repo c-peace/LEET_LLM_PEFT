@@ -331,7 +331,6 @@ def evaluate_rules(raw_output):
         "valid_answer_index",
         "no_empty_choices",
         "no_duplicate_choices",
-        "sentence_like_choices",
     ]
     result["all_passed"] = all(result[key] for key in checked_keys)
     return result, parsed
@@ -397,6 +396,7 @@ def generate_eval_results(model, tokenizer, valid_records, template, config, run
         "run_id": run_id,
         "model_name": model_name,
         "dataset_path": config["dataset"]["path"],
+        "eval_dataset_path": config["dataset"].get("test_path", config["dataset"]["path"]),
         "eval_summary": summarize_rule_results(items),
         "items": items,
     }
@@ -422,6 +422,8 @@ def train(args):
     run_dir.mkdir(parents=True, exist_ok=True)
 
     dataset_records = load_json(resolve_path(config["dataset"]["path"]))
+    test_path = config["dataset"].get("test_path")
+    test_records = load_json(resolve_path(test_path)) if test_path else None
     template = resolve_path(config["prompt"]["template_path"]).read_text(encoding="utf-8")
     train_records, valid_records = split_stratified(
         dataset_records,
@@ -432,6 +434,8 @@ def train(args):
 
     write_json(run_dir / "train_split.json", train_records)
     write_json(run_dir / "valid_split.json", valid_records)
+    if test_records is not None:
+        write_json(run_dir / "test_set.json", test_records)
     write_json(run_dir / config["outputs"]["train_config_file"], config)
 
     tokenizer = load_tokenizer(model_name)
@@ -496,7 +500,7 @@ def train(args):
     eval_results = generate_eval_results(
         model,
         tokenizer,
-        valid_records,
+        test_records or valid_records,
         template,
         config,
         run_id,

@@ -1,6 +1,7 @@
 {
   "dataset": {
-    "path": "sft_dataset.json",
+    "path": "sft_train_aug_v1.json",
+    "test_path": "test_set_v1.json",
     "train_ratio": 0.9,
     "valid_ratio": 0.1,
     "stratify_by": "question_type",

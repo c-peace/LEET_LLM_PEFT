@@ -30,6 +30,8 @@ wandb/
 
 # Source/raw data not needed for Colab training
 raw_data/
+experiments/
+augmentation/
 
 # Model artifacts
 *.safetensors
