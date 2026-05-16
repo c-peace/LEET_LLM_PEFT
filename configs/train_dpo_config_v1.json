@@ -1,0 +1,50 @@
+{
+  "dataset": {
+    "path": "dpo_train_clean_v1.json",
+    "train_ratio": 0.9,
+    "stratify_by": "requested_failure_type",
+    "seed": 42
+  },
+  "prompt": {
+    "template_path": "configs/prompt_template_v1.md",
+    "output_format": "json"
+  },
+  "models": [
+    "Qwen/Qwen3.5-4B",
+    "google/gemma-4-E4B-it",
+    "LGAI-EXAONE/EXAONE-3.5-2.4B-Instruct"
+  ],
+  "sft_adapters": {
+    "Qwen/Qwen3.5-4B": "choipeace/leet-seonji-qwen35-4b-aug-v1",
+    "google/gemma-4-E4B-it": "choipeace/leet-seonji-gemma4-e4b-it-aug-v1",
+    "LGAI-EXAONE/EXAONE-3.5-2.4B-Instruct": "choipeace/leet-seonji-exaone35-24b-instruct-aug-v1"
+  },
+  "training": {
+    "method": "dpo_qlora",
+    "load_in_4bit": true,
+    "max_length": 4096,
+    "max_prompt_length": 3072,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0.05,
+    "beta": 0.1,
+    "learning_rate": 0.00005,
+    "num_train_epochs": 1,
+    "per_device_train_batch_size": 1,
+    "per_device_eval_batch_size": 1,
+    "gradient_accumulation_steps": 8,
+    "warmup_ratio": 0.03,
+    "weight_decay": 0.0,
+    "gradient_checkpointing": true,
+    "save_strategy": "epoch",
+    "eval_strategy": "epoch",
+    "logging_steps": 10
+  },
+  "outputs": {
+    "root_dir": "outputs/dpo_runs",
+    "adapter_dir_name": "adapter",
+    "eval_results_file": "eval_results.json",
+    "eval_summary_file": "eval_summary.json",
+    "train_config_file": "train_config.json"
+  }
+}
