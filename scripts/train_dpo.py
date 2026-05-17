@@ -63,6 +63,10 @@ def make_prompt(record, template):
     ).rstrip()
 
 
+def make_inference_prompt(record, template):
+    return make_prompt(record, template)
+
+
 def split_stratified(records, stratify_key, train_ratio, seed):
     rng = random.Random(seed)
     groups = {}
@@ -102,6 +106,172 @@ def to_preference_rows(records, template):
             }
         )
     return rows
+
+
+def extract_json_object(raw_text):
+    raw_text = raw_text.strip()
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw_text, flags=re.S)
+    if fenced:
+        raw_text = fenced.group(1)
+
+    start = raw_text.find("{")
+    end = raw_text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("JSON object not found")
+
+    return json.loads(raw_text[start : end + 1])
+
+
+def is_sentence_like(choice):
+    choice = choice.strip()
+    if not choice:
+        return False
+    if choice[-1] in ".!?":
+        return True
+    return choice.endswith(
+        (
+            "다",
+            "이다",
+            "한다",
+            "된다",
+            "있다",
+            "없다",
+            "않다",
+            "아니다",
+            "수 있다",
+            "수 없다",
+        )
+    )
+
+
+def evaluate_rules(raw_output):
+    result = {
+        "json_parse_success": False,
+        "valid_choice_count": False,
+        "valid_answer_index": False,
+        "no_empty_choices": False,
+        "no_duplicate_choices": False,
+        "sentence_like_choices": False,
+        "all_passed": False,
+        "errors": [],
+    }
+
+    try:
+        parsed = extract_json_object(raw_output)
+        result["json_parse_success"] = True
+    except Exception as exc:
+        result["errors"].append(f"parse_error: {exc}")
+        return result, None
+
+    choices = parsed.get("choices")
+    answer_index = parsed.get("answer_index")
+
+    if isinstance(choices, list) and len(choices) == 5:
+        result["valid_choice_count"] = True
+    else:
+        result["errors"].append("choices must be a list of exactly 5 items")
+
+    if isinstance(answer_index, int) and 1 <= answer_index <= 5:
+        result["valid_answer_index"] = True
+    else:
+        result["errors"].append("answer_index must be an integer from 1 to 5")
+
+    if isinstance(choices, list):
+        normalized_choices = [str(choice).strip() for choice in choices]
+        if all(normalized_choices):
+            result["no_empty_choices"] = True
+        else:
+            result["errors"].append("choices contain empty item")
+
+        if len(set(normalized_choices)) == len(normalized_choices):
+            result["no_duplicate_choices"] = True
+        else:
+            result["errors"].append("choices contain duplicate item")
+
+        if len(normalized_choices) == 5 and all(is_sentence_like(choice) for choice in normalized_choices):
+            result["sentence_like_choices"] = True
+        else:
+            result["errors"].append("choices are not all sentence-like")
+
+    checked_keys = [
+        "json_parse_success",
+        "valid_choice_count",
+        "valid_answer_index",
+        "no_empty_choices",
+        "no_duplicate_choices",
+    ]
+    result["all_passed"] = all(result[key] for key in checked_keys)
+    return result, parsed
+
+
+def summarize_rule_results(items):
+    keys = [
+        "json_parse_success",
+        "valid_choice_count",
+        "valid_answer_index",
+        "no_empty_choices",
+        "no_duplicate_choices",
+        "sentence_like_choices",
+        "all_passed",
+    ]
+    summary = {"total": len(items)}
+    for key in keys:
+        summary[key] = sum(1 for item in items if item["rule_eval"][key])
+    return summary
+
+
+def generate_test_results(model, tokenizer, test_records, template, config, run_id, model_name, sft_adapter):
+    evaluation_config = config.get("evaluation", {})
+    sample_size = min(evaluation_config.get("generation_sample_size", len(test_records)), len(test_records))
+    eval_records = test_records[:sample_size]
+    max_prompt_length = config["training"].get("max_prompt_length", config["training"]["max_length"])
+    items = []
+
+    model.eval()
+    for index, record in enumerate(eval_records):
+        prompt = make_inference_prompt(record, template)
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=max_prompt_length)
+        inputs = {key: value.to(model.device) for key, value in inputs.items()}
+
+        with torch.no_grad():
+            generated = model.generate(
+                **inputs,
+                max_new_tokens=evaluation_config.get("max_new_tokens", 1024),
+                do_sample=evaluation_config.get("do_sample", False),
+                temperature=evaluation_config.get("temperature", 0.2)
+                if evaluation_config.get("do_sample", False)
+                else None,
+                top_p=evaluation_config.get("top_p", 0.9) if evaluation_config.get("do_sample", False) else None,
+                pad_token_id=tokenizer.pad_token_id,
+                eos_token_id=tokenizer.eos_token_id,
+            )
+
+        prompt_length = inputs["input_ids"].shape[-1]
+        generated_ids = generated[0][prompt_length:]
+        raw_output = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+        rule_eval, parsed_output = evaluate_rules(raw_output)
+
+        items.append(
+            {
+                "id": index,
+                "input": record["input"],
+                "gold_output": record["output"],
+                "model_raw_output": raw_output,
+                "model_output": parsed_output,
+                "rule_eval": rule_eval,
+                "llm_judge": None,
+            }
+        )
+
+    return {
+        "run_id": run_id,
+        "model_name": model_name,
+        "sft_adapter": sft_adapter,
+        "dataset_path": config["dataset"]["path"],
+        "eval_dataset_path": config["dataset"].get("test_path", config["dataset"]["path"]),
+        "eval_summary": summarize_rule_results(items),
+        "items": items,
+    }
 
 
 def load_tokenizer(model_name):
@@ -243,6 +413,9 @@ def build_dpo_config(config, run_dir, run_id, max_steps=None):
 
 def train(args):
     config = load_json(resolve_path(args.config))
+    if args.eval_sample_size is not None:
+        config.setdefault("evaluation", {})["generation_sample_size"] = args.eval_sample_size
+
     model_name = args.model_name or config["models"][0]
     sft_adapter = resolve_sft_adapter(model_name, config, args.sft_adapter)
     run_id = args.run_id or make_run_id(model_name)
@@ -253,6 +426,8 @@ def train(args):
 
     records = load_json(resolve_path(config["dataset"]["path"]))
     records = [record for record in records if record.get("meta", {}).get("quality_tier") != "exclude"]
+    test_path = config["dataset"].get("test_path")
+    test_records = load_json(resolve_path(test_path)) if test_path else None
     template = resolve_path(config["prompt"]["template_path"]).read_text(encoding="utf-8")
     train_records, valid_records = split_stratified(
         records,
@@ -267,6 +442,8 @@ def train(args):
     write_json(run_dir / "valid_split.json", valid_records)
     write_json(run_dir / "train_preferences.json", train_rows)
     write_json(run_dir / "valid_preferences.json", valid_rows)
+    if test_records is not None:
+        write_json(run_dir / "test_set.json", test_records)
     write_json(run_dir / config["outputs"]["train_config_file"], config)
 
     tokenizer = load_tokenizer(model_name)
@@ -306,20 +483,40 @@ def train(args):
     tokenizer.save_pretrained(str(adapter_dir))
 
     metrics = trainer.evaluate()
+    test_results = None
+    if test_records is not None:
+        test_results = generate_test_results(
+            trainer.model,
+            tokenizer,
+            test_records,
+            template,
+            config,
+            run_id,
+            model_name,
+            sft_adapter,
+        )
+        write_json(run_dir / "test_generation_results.json", test_results)
+        write_json(run_dir / "test_generation_summary.json", test_results["eval_summary"])
+
     eval_summary = {
         "train_size": len(train_rows),
         "valid_size": len(valid_rows),
+        "test_size": len(test_records) if test_records is not None else None,
         "dataset_path": config["dataset"]["path"],
+        "eval_dataset_path": config["dataset"].get("test_path"),
         "model_name": model_name,
         "sft_adapter": sft_adapter,
         "metrics": metrics,
+        "test_generation_summary": test_results["eval_summary"] if test_results is not None else None,
     }
     eval_results = {
         "run_id": run_id,
         "model_name": model_name,
         "sft_adapter": sft_adapter,
         "dataset_path": config["dataset"]["path"],
+        "eval_dataset_path": config["dataset"].get("test_path"),
         "eval_summary": eval_summary,
+        "test_generation": test_results,
     }
     write_json(run_dir / config["outputs"]["eval_results_file"], eval_results)
     write_json(run_dir / config["outputs"]["eval_summary_file"], eval_summary)
@@ -338,6 +535,7 @@ def main():
     parser.add_argument("--run_id", default=None)
     parser.add_argument("--sft_adapter", default=None)
     parser.add_argument("--max_steps", type=int, default=None)
+    parser.add_argument("--eval_sample_size", type=int, default=None)
     parser.add_argument("--copy_config", action="store_true")
     train(parser.parse_args())
 

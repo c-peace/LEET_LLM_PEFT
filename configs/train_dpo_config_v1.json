@@ -1,6 +1,7 @@
 {
   "dataset": {
     "path": "dpo_train_clean_v1.json",
+    "test_path": "test_set_v1.json",
     "train_ratio": 0.9,
     "stratify_by": "requested_failure_type",
     "seed": 42
@@ -39,6 +40,14 @@
     "save_strategy": "epoch",
     "eval_strategy": "epoch",
     "logging_steps": 10
+  },
+  "evaluation": {
+    "rule_based": true,
+    "generation_sample_size": 100,
+    "max_new_tokens": 1024,
+    "temperature": 0.2,
+    "top_p": 0.9,
+    "do_sample": false
   },
   "outputs": {
     "root_dir": "outputs/dpo_runs",

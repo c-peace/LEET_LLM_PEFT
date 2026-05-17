@@ -83,6 +83,7 @@ def write_experiment_note(
 ## Files
 - Adapter files are stored at the repository root.
 - Run artifacts are stored under `run_artifacts/{run_dir.name}/`.
+- If present, test generation outputs are stored as `test_generation_results.json` and `test_generation_summary.json` in the run artifacts.
 """
     note_path = run_dir / "experiment_note.md"
     note_path.write_text(experiment_note, encoding="utf-8")
