@@ -23,8 +23,8 @@
   "training": {
     "method": "dpo_qlora",
     "load_in_4bit": true,
-    "max_length": 4096,
-    "max_prompt_length": 3072,
+    "max_length": 2048,
+    "max_prompt_length": 1536,
     "lora_r": 16,
     "lora_alpha": 32,
     "lora_dropout": 0.05,
