@@ -23,8 +23,8 @@
   "training": {
     "method": "dpo_qlora",
     "load_in_4bit": true,
-    "max_length": 2048,
-    "max_prompt_length": 1536,
+    "max_length": 1536,
+    "max_prompt_length": 1024,
     "lora_r": 16,
     "lora_alpha": 32,
     "lora_dropout": 0.05,
@@ -37,6 +37,9 @@
     "warmup_ratio": 0.03,
     "weight_decay": 0.0,
     "gradient_checkpointing": true,
+    "bf16": false,
+    "fp16": false,
+    "precompute_ref_log_probs": true,
     "save_strategy": "epoch",
     "eval_strategy": "epoch",
     "logging_steps": 10

@@ -385,8 +385,8 @@ def build_dpo_config(config, run_dir, run_id, max_steps=None):
         "weight_decay": training_config["weight_decay"],
         "logging_steps": training_config["logging_steps"],
         "save_strategy": training_config["save_strategy"],
-        "bf16": torch.cuda.is_available(),
-        "fp16": False,
+        "bf16": training_config.get("bf16", torch.cuda.is_available()),
+        "fp16": training_config.get("fp16", False),
         "report_to": "none",
         "remove_unused_columns": False,
         "gradient_checkpointing": training_config["gradient_checkpointing"],
@@ -394,6 +394,8 @@ def build_dpo_config(config, run_dir, run_id, max_steps=None):
         "max_length": training_config["max_length"],
         "max_prompt_length": training_config["max_prompt_length"],
     }
+    if "precompute_ref_log_probs" in training_config:
+        kwargs["precompute_ref_log_probs"] = training_config["precompute_ref_log_probs"]
     if "max_steps" in training_config:
         kwargs["max_steps"] = training_config["max_steps"]
     if "save_steps" in training_config:
